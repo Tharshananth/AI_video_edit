@@ -229,8 +229,10 @@ class VisionDescriptionAgent:
             self.logger.error(f"Failed to analyze frame {frame_data['frame_id']}: {e}")
             return None
     
+    # Key changes in _parse_vision_response method:
+
     def _parse_vision_response(self, content: str) -> Dict:
-        """Parse JSON from vision API response"""
+        """Parse JSON from vision API response - WITH PROPER ERROR HANDLING"""
         try:
             # Try to find JSON in response
             start_idx = content.find('{')
@@ -241,22 +243,40 @@ class VisionDescriptionAgent:
                 data = json.loads(json_str)
                 
                 # Validate required fields exist
+                if not isinstance(data, dict):
+                    raise ValueError("Response is not a JSON object")
+                
+                # Provide defaults for missing fields
                 if not data.get("ui_elements"):
-                    self.logger.warning("Response missing ui_elements field")
+                    data["ui_elements"] = []
+                    self.logger.warning("Response missing ui_elements field, using empty array")
+                
                 if not data.get("context"):
-                    data["context"] = ""
+                    data["context"] = "Unable to determine context"
+                    self.logger.warning("Response missing context field")
+                
+                if not data.get("action"):
+                    data["action"] = "unknown"
+                
+                if not data.get("page_state"):
+                    data["page_state"] = "unknown"
                 
                 return data
             
-            # ✓ FIXED: Fail loudly instead of silently
+            # ✅ FIXED: Fail loudly instead of silently returning empty dict
             self.logger.error(f"❌ No JSON found in vision response. Raw content:\n{content[:500]}")
             raise ValueError("Vision API response did not contain valid JSON")
             
         except json.JSONDecodeError as e:
-            # ✓ FIXED: Log the actual content and re-raise
+            # ✅ FIXED: Log the actual content and re-raise
             self.logger.error(f"❌ Failed to parse JSON from vision response: {e}")
             self.logger.error(f"Response content (first 500 chars): {content[:500]}")
             raise ValueError(f"Invalid JSON in vision API response: {e}")
+        
         except Exception as e:
             self.logger.error(f"❌ Unexpected error parsing vision response: {e}")
             raise
+
+# Apply the same pattern to:
+# - agents/agent_5_analysis_agent.py (_parse_timeline_response)
+# - agents/agent_6_script_planner.py (_parse_script_response)
